@@ -245,8 +245,8 @@
         const camera = new Camera(videoElement, {
             onFrame: async () => {
                 // Kirim frame ke 'pose' dan 'hands'
-                await hands.send({image: videoElement}); // <--- GANTI MENJADI INI
-                await hands.send({image: videoM});
+                await pose.send({image: videoElement});
+                await hands.send({image: videoElement});
             },
             width: 640,
             height: 480
@@ -257,3 +257,4 @@
 </body>
 
 </html>
+
