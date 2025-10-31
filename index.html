@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Deteksi Gestur HP</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #222;
+            color: white;
+            height: 100vh;
+        }
+        /* Kontainer untuk video dan hasil */
+        .container {
+            position: relative;
+            width: 90vw;
+            max-width: 640px;
+            margin: auto;
+        }
+        /* Video dari kamera */
+        .input_video {
+            display: none; /* Sembunyikan video mentah */
+        }
+        /* Canvas untuk menampilkan video + landmark */
+        .output_canvas {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+        }
+        /* Gambar reaksi */
+        #reactionImage {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            border: 2px solid #555;
+            box-sizing: border-box; /* Agar border tidak menambah ukuran */
+        }
+        h1 {
+            color: #eee;
+            margin-top: 20px;
+        }
+        /* Atur layout berdampingan di layar besar */
+        @media (min-width: 768px) {
+            .container {
+                display: flex;
+                gap: 20px;
+            }
+            .output_canvas, #reactionImage {
+                width: 50%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Deteksi Gestur (Versi Web)</h1>
+    <div class="container">
+        <video class="input_video"></video>
+        <canvas class="output_canvas" width="640px" height="480px"></canvas>
+        <img id="reactionImage" src="react_idle.png" alt="Reaksi">
+    </div>
+
+    <script type="module">
+        // --- Setup Elemen ---
+        const videoElement = document.querySelector('.input_video');
+        const canvasElement = document.querySelector('.output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const reactionImgElement = document.getElementById('reactionImage');
+
+        // --- Daftar Gambar Reaksi ---
+        const reactions = {
+            "finger": "react1.png",
+            "mouth": "react2.png",
+            "pray": "react3.png",
+            "phone": "react4.png",
+            "idle": "react_idle.png"
+        };
+        
+        // --- Fungsi Jarak ---
+        function distance(p1, p2) {
+            if (!p1 || !p2) {
+                return Infinity;
+            }
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        // --- FUNGSI UTAMA (Callback setiap frame) ---
+        function onResults(results) {
+            // Bersihkan canvas
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Mirror (flip) canvas agar seperti cermin
+            canvasCtx.translate(canvasElement.width, 0);
+            canvasCtx.scale(-1, 1);
+            
+            // Gambar video ke canvas
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            const poseLandmarks = results.poseLandmarks;
+            const handLandmarksList = results.multiHandLandmarks;
+
+            let gesture = "idle"; // Default
+
+            // --- LOGIKA DETEKSI GESTUR (SUDAH DIPERBAIKI) ---
+            
+            // --- Mulai bagian DEBUG (Cetak nilai ke konsol) ---
+            let debugText = "DEBUG:\n";
+            if (handLandmarksList && handLandmarksList.length > 0) {
+                if (handLandmarksList.length === 2) {
+                    const dist_pray = distance(handLandmarksList[0][0], handLandmarksList[1][0]);
+                    debugText += `Pray Dist (2 Tangan): ${dist_pray.toFixed(2)}\n`;
+                }
+                
+                const lm = handLandmarksList[0]; // Ambil tangan pertama
+                const index_tip = lm[8];
+                const middle_tip = lm[12];
+                const thumb_tip = lm[4];
+
+                if (poseLandmarks) {
+                    const nose = poseLandmarks[0];
+                    const dist_nose_idx = distance(index_tip, nose);
+                    const dist_nose_thumb = distance(thumb_tip, nose);
+                    debugText += `Mouth Dist (Hidung ke Jari): Idx=${dist_nose_idx.toFixed(2)}, Thumb=${dist_nose_thumb.toFixed(2)}\n`;
+                }
+                
+                const dist_idx_mid = distance(index_tip, middle_tip);
+                const dist_idx_thumb = distance(index_tip, thumb_tip);
+                debugText += `Finger Dist: Idx-Mid=${dist_idx_mid.toFixed(2)}, Idx-Thumb=${dist_idx_thumb.toFixed(2)}\n`;
+            }
+            console.log(debugText); // Cetak semua info debug ke konsol
+            // --- Akhir bagian DEBUG ---
+
+
+            if (handLandmarksList && handLandmarksList.length > 0) {
+                
+                // PRIORITAS 1: Gestur 2 Tangan (Pray)
+                if (handLandmarksList.length === 2) {
+                    const hand1_wrist = handLandmarksList[0][0]; // Landmark 0 = Pergelangan
+                    const hand2_wrist = handLandmarksList[1][0];
+                    const dist_pray = distance(hand1_wrist, hand2_wrist);
+                    
+                    // UBAH ANGKA 0.2 INI JIKA PERLU
+                    if (dist_pray < 0.2) { 
+                        gesture = "pray";
+                    }
+                } 
+                
+                // PRIORITAS 2: Gestur Mulut (PERBAIKAN LOGIKA)
+                // Dicek jika gestur BUKAN 'pray', tidak peduli 1 atau 2 tangan
+                if (gesture === "idle" && poseLandmarks) {
+                    const lm = handLandmarksList[0]; // Cek tangan pertama
+                    const index_tip = lm[8];
+                    const thumb_tip = lm[4];
+                    const nose = poseLandmarks[0]; // Landmark 0 = Hidung
+                        
+                    const dist_nose_idx = distance(index_tip, nose);
+                    const dist_nose_thumb = distance(thumb_tip, nose);
+                        
+                    // UBAH ANGKA 0.15 INI JIKA PERLU
+                    if (dist_nose_idx < 0.15 || dist_nose_thumb < 0.15) {
+                        gesture = "mouth";
+                    }
+                }
+                
+                // PRIORITAS 3 & 4: (Hanya jika 1 Tangan & bukan gestur lain)
+                if (gesture === "idle" && handLandmarksList.length === 1) {
+                    const lm = handLandmarksList[0];
+                    const wrist = lm[0];
+                    const index_tip = lm[8];
+                    const middle_tip = lm[12];
+                    const thumb_tip = lm[4];
+                    
+                    const dist_idx_mid = distance(index_tip, middle_tip);
+                    const dist_idx_thumb = distance(index_tip, thumb_tip);
+                    
+                    // 2b. Gestur Jari (UBAH ANGKA 0.1 INI)
+                    if (dist_idx_mid > 0.1 && dist_idx_thumb > 0.1) {
+                        gesture = "finger";
+                    }
+                    
+                    // 2c. Gestur Telepon (UBAH ANGKA 0.3/0.7 INI)
+                    else if ((0.3 < wrist.x && wrist.x < 0.7) && (0.3 < wrist.y && wrist.y < 0.7)) {
+                        gesture = "phone";
+                    }
+                }
+            }
+            // --- Akhir LOGIKA DETEKSI GESTUR ---
+            
+            // --- Perbarui Gambar Reaksi ---
+            reactionImgElement.src = reactions[gesture];
+
+            // --- Gambar Landmark (Opsional, hapus jika tidak perlu) ---
+            if (poseLandmarks) {
+                drawConnectors(canvasCtx, poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                drawLandmarks(canvasCtx, poseLandmarks, {color: '#FF0000', lineWidth: 2});
+            }
+            if (handLandmarksList) {
+                for (const landmarks of handLandmarksList) {
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00CCFF', lineWidth: 5});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#FF00FF', lineWidth: 2});
+                }
+            }
+            // -----------------------------------------------------------
+
+            canvasCtx.restore();
+        }
+
+        // --- Inisialisasi MediaPipe ---
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults); // Menggunakan onResults dari Hands sebagai pemicu utama
+
+        const pose = new Pose({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+        }});
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        // Kita tidak memakai pose.onResults, kita akan kirim manual
+        
+        // --- Setup Kamera ---
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                // Kirim frame ke 'pose' dan 'hands'
+                await pose.send({image: videoElement});
+                await hands.send({image: videoM});
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+
+    </script>
+</body>
+</html>
